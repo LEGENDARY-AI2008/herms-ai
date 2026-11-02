@@ -17,3 +17,9 @@ services:
         sync: false
       - key: TELEGRAM_ALLOWED_USERS
         sync: false
+      - key: PAIR_KEY
+        sync: false
+      - key: WHATSAPP_ALLOWED_USERS
+        sync: false
+      - key: WA_CREDS_B64
+        sync: false
