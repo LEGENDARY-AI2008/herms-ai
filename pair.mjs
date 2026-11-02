@@ -11,7 +11,6 @@ const HOME = process.env.HERMES_HOME || '/opt/data';
 const SESSION = path.join(HOME, 'platforms', 'whatsapp', 'session');
 const CODE = '/tmp/pair-code.txt', STATUS = '/tmp/pair-status.txt', BACKUP = '/tmp/pair-backup.b64';
 const PAIR_DEPS = '/tmp/pairdeps';
-const BAILEYS_VERSION = '6.7.9';
 
 fs.mkdirSync(SESSION, { recursive: true });
 const setStatus = (s) => { fs.writeFileSync(STATUS, s); console.log('[pair]', s); };
@@ -19,21 +18,36 @@ const setStatus = (s) => { fs.writeFileSync(STATUS, s); console.log('[pair]', s)
 function findBaileys() {
   try {
     const out = execSync(
-      'find /opt /app /usr /root /home /tmp /var -type d -path "*node_modules/@whiskeysockets/baileys" 2>/dev/null | head -1'
+      'find /opt /app /usr /root /home /tmp /var -type d -path "*node_modules/@whiskeysockets/baileys" 2>/dev/null | head -1',
+      { timeout: 60000 }
     ).toString().trim();
     if (out) return out;
   } catch {}
   return null;
 }
 
+function npmInstall(spec) {
+  try {
+    execSync(`npm install --prefix ${PAIR_DEPS} ${spec} --no-audit --no-fund`,
+      { stdio: ['ignore', 'pipe', 'pipe'], timeout: 300000 });
+    return null;
+  } catch (e) {
+    const text = (String(e.stderr || '') + String(e.stdout || '') + String(e.message || '')).trim();
+    return text.slice(-400);
+  }
+}
+
 let dir = findBaileys();
 if (!dir) {
-  setStatus('installing WhatsApp library (one time, about a minute)');
-  try {
-    execSync(`npm install --prefix ${PAIR_DEPS} @whiskeysockets/baileys@${BAILEYS_VERSION} --no-audit --no-fund`,
-      { stdio: 'ignore', timeout: 240000 });
-  } catch (e) {
-    setStatus('error: could not install WhatsApp library: ' + String(e.message).slice(0, 200));
+  setStatus('installing WhatsApp library (first time only)');
+  let err = npmInstall('@whiskeysockets/baileys@6.7.9');
+  if (err) {
+    console.log('[pair] first install failed:', err);
+    setStatus('installing WhatsApp library (trying latest version)');
+    err = npmInstall('@whiskeysockets/baileys@latest');
+  }
+  if (err) {
+    setStatus('error: npm install failed: ' + err.replace(/\s+/g, ' ').slice(-300));
     process.exit(1);
   }
   dir = path.join(PAIR_DEPS, 'node_modules', '@whiskeysockets', 'baileys');
