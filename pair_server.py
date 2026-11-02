@@ -16,7 +16,8 @@ def read(p):
 
 def page(key):
     status, code, backup = read(STATUS), read(CODE), read(BACKUP)
-    refresh = '<meta http-equiv="refresh" content="5">' if status.startswith(("waiting", "starting")) else ""
+    busy = status.startswith(("waiting", "starting", "installing"))
+    refresh = '<meta http-equiv="refresh" content="4">' if busy else ""
     body = f"<h2>Legendary Hermes: WhatsApp pairing</h2><p>Status: <b>{html.escape(status or 'idle')}</b></p>"
     if code and not status.startswith("paired"):
         body += f"<p>Pairing code:</p><h1 style='letter-spacing:4px'>{html.escape(code)}</h1>"
@@ -34,14 +35,19 @@ def page(key):
 
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
-    def send(self, code, text):
+    def send(self, code, text, headers=None):
         data = text.encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(data)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
     def authed(self):
         q = parse_qs(urlparse(self.path).query)
         k = (q.get("key") or [""])[0]
@@ -69,11 +75,10 @@ class H(BaseHTTPRequestHandler):
         for f in (CODE, STATUS, BACKUP):
             try: os.remove(f)
             except OSError: pass
+        with open(STATUS, "w") as f:
+            f.write("installing WhatsApp library (first time only)")
         proc = subprocess.Popen(["node", "/app/pair.mjs", number], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(60):
-            if read(CODE) or read(STATUS).startswith("error"):
-                break
-            time.sleep(1)
-        self.send(200, page(k))
+        # Reply right away and let the page refresh. The pairing code can take a minute on the first run.
+        self.send(303, "", {"Location": f"/pair?key={k}"})
 
 ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
