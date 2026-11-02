@@ -44,5 +44,7 @@ python3 /app/pair_server.py &
 if [ -n "$HERMES_MODEL" ]; then
   hermes config set model "$HERMES_MODEL" || true
 fi
+mkdir -p "$HERMES_HOME/platforms/pairing"
+chmod -R a+rwX "$HERMES_HOME" 2>/dev/null || true
 hermes config set whatsapp.unauthorized_dm_behavior ignore || true
 exec hermes gateway run
