@@ -14,7 +14,7 @@ fi
 cp /app/SOUL.md "$HERMES_HOME/SOUL.md"
 
 # WhatsApp: restore the saved login, then enable the bridge only once paired.
-# Source 1: Render secret file /etc/secrets/wa-session.b64
+# Source 1: Render secret file /etc/secrets/wa-session.b64 (archive with files at top level)
 # Source 2: env var WA_SESSION_B64 (same content)
 WA_BASE="$HERMES_HOME/platforms/whatsapp"
 WA_SESSION="$WA_BASE/session"
@@ -28,7 +28,6 @@ fi
 if [ ! -f "$WA_SESSION/creds.json" ] && [ -n "$WA_B64" ]; then
   echo "$WA_B64" | base64 -d | tar -xz -C "$WA_SESSION" 2>/dev/null \
     || echo "WhatsApp session could not be restored"
-  # the archive holds creds.json at its top level
   [ -f "$WA_SESSION/creds.json" ] || echo "creds.json missing after restore"
 fi
 if [ -f "$WA_SESSION/creds.json" ]; then
