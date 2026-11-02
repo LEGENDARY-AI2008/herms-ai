@@ -1,4 +1,4 @@
-// WhatsApp pairing-code helper. Usage: node pair.mjs 234XXXXXXXXXX
+// WhatsApp pairing-code helper. Usage: node pair.mjs 2348XXXXXXXXX
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -10,23 +10,35 @@ if (!number) { console.error('Usage: node pair.mjs <number with country code>');
 const HOME = process.env.HERMES_HOME || '/opt/data';
 const SESSION = path.join(HOME, 'platforms', 'whatsapp', 'session');
 const CODE = '/tmp/pair-code.txt', STATUS = '/tmp/pair-status.txt', BACKUP = '/tmp/pair-backup.b64';
+const PAIR_DEPS = '/tmp/pairdeps';
+const BAILEYS_VERSION = '6.7.9';
+
 fs.mkdirSync(SESSION, { recursive: true });
 const setStatus = (s) => { fs.writeFileSync(STATUS, s); console.log('[pair]', s); };
 
 function findBaileys() {
-  for (const name of ['@whiskeysockets/baileys', 'baileys']) {
-    try {
-      const out = execSync(
-        `find /opt /app /usr /root /home -type d -path "*/node_modules/${name}" 2>/dev/null | head -1`
-      ).toString().trim();
-      if (out) return out;
-    } catch {}
-  }
+  try {
+    const out = execSync(
+      'find /opt /app /usr /root /home /tmp /var -type d -path "*node_modules/@whiskeysockets/baileys" 2>/dev/null | head -1'
+    ).toString().trim();
+    if (out) return out;
+  } catch {}
   return null;
 }
 
-const dir = findBaileys();
-if (!dir) { setStatus('error: Baileys not found in image'); process.exit(1); }
+let dir = findBaileys();
+if (!dir) {
+  setStatus('installing WhatsApp library (one time, about a minute)');
+  try {
+    execSync(`npm install --prefix ${PAIR_DEPS} @whiskeysockets/baileys@${BAILEYS_VERSION} --no-audit --no-fund`,
+      { stdio: 'ignore', timeout: 240000 });
+  } catch (e) {
+    setStatus('error: could not install WhatsApp library: ' + String(e.message).slice(0, 200));
+    process.exit(1);
+  }
+  dir = path.join(PAIR_DEPS, 'node_modules', '@whiskeysockets', 'baileys');
+}
+
 const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
 let entry = pkg.main || 'lib/index.js';
 const exp = pkg.exports && (pkg.exports['.'] || pkg.exports);
@@ -36,8 +48,8 @@ if (exp) {
   else if (e && typeof e === 'object') entry = e.default || e.import || entry;
 }
 const mod = await import(pathToFileURL(path.join(dir, entry)).href);
-const makeWASocket = mod.default?.default || mod.default || mod.makeWASocket;
-const { useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } = mod;
+const lib = (mod.default && mod.default.makeWASocket) ? mod.default : mod;
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } = lib;
 
 const noop = () => {};
 const logger = { level: 'silent', trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop, child() { return logger; } };
@@ -54,7 +66,7 @@ async function start() {
   try { version = (await fetchLatestBaileysVersion()).version; } catch {}
   const sock = makeWASocket({
     auth: state, logger, version,
-    browser: Browsers?.ubuntu ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '22.04.4'],
+    browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '22.04.4'],
     printQRInTerminal: false, markOnlineOnConnect: false,
   });
   sock.ev.on('creds.update', saveCreds);
