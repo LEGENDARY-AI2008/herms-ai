@@ -13,11 +13,23 @@ fi
 # Personality (re-applied every boot, so edit SOUL.md on GitHub to change it)
 cp /app/SOUL.md "$HERMES_HOME/SOUL.md"
 
-# WhatsApp: restore saved login (WA_CREDS_B64) and enable the bridge only once paired
-WA_SESSION="$HERMES_HOME/platforms/whatsapp/session"
+# WhatsApp: restore the saved login, then enable the bridge only once paired.
+# Source 1: Render secret file /etc/secrets/wa-session.b64
+# Source 2: env var WA_SESSION_B64 (same content)
+WA_BASE="$HERMES_HOME/platforms/whatsapp"
+WA_SESSION="$WA_BASE/session"
 mkdir -p "$WA_SESSION"
-if [ ! -f "$WA_SESSION/creds.json" ] && [ -n "$WA_CREDS_B64" ]; then
-  echo "$WA_CREDS_B64" | base64 -d > "$WA_SESSION/creds.json" || rm -f "$WA_SESSION/creds.json"
+WA_B64=""
+if [ -f /etc/secrets/wa-session.b64 ]; then
+  WA_B64="$(tr -d '\n\r ' < /etc/secrets/wa-session.b64)"
+elif [ -n "$WA_SESSION_B64" ]; then
+  WA_B64="$WA_SESSION_B64"
+fi
+if [ ! -f "$WA_SESSION/creds.json" ] && [ -n "$WA_B64" ]; then
+  echo "$WA_B64" | base64 -d | tar -xz -C "$WA_SESSION" 2>/dev/null \
+    || echo "WhatsApp session could not be restored"
+  # the archive holds creds.json at its top level
+  [ -f "$WA_SESSION/creds.json" ] || echo "creds.json missing after restore"
 fi
 if [ -f "$WA_SESSION/creds.json" ]; then
   export WHATSAPP_ENABLED=true
