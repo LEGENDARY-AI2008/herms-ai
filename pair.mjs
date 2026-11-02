@@ -12,6 +12,8 @@ const SESSION = path.join(HOME, 'platforms', 'whatsapp', 'session');
 const CODE = '/tmp/pair-code.txt', STATUS = '/tmp/pair-status.txt', BACKUP = '/tmp/pair-backup.b64';
 const PAIR_DEPS = '/tmp/pairdeps';
 
+// Start every pairing with a clean session. Old half-finished login files cause "logged out".
+fs.rmSync(SESSION, { recursive: true, force: true });
 fs.mkdirSync(SESSION, { recursive: true });
 const setStatus = (s) => { fs.writeFileSync(STATUS, s); console.log('[pair]', s); };
 
